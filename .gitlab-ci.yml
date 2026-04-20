@@ -1,0 +1,61 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"'
+    - when: never
+
+stages:
+  - build
+
+variables:
+  KANIKO_IMAGE: gcr.io/kaniko-project/executor:v1.23.2-debug
+  ELASTIC_STACK_VERSION: "9.3.3"
+  ARTIFACT_DOWNLOADS_BASE_URL: "https://artifacts.elastic.co/downloads"
+  TARGET_IMAGE_REPOSITORY: "elastic-artifact-registry"
+  TARGET_IMAGE_TAG: ""
+
+build_elastic_artifact_registry:
+  stage: build
+  image:
+    name: $KANIKO_IMAGE
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"'
+      when: manual
+    - when: never
+  script:
+    - |
+      set -eu
+
+      required_vars="REGISTRY_ENDPOINT REGISTRY_USERNAME REGISTRY_PASSWORD ELASTIC_STACK_VERSION TARGET_IMAGE_REPOSITORY"
+      for var_name in $required_vars; do
+        eval "var_value=\${$var_name:-}"
+        if [ -z "$var_value" ]; then
+          echo "Missing required CI/CD variable: $var_name" >&2
+          exit 1
+        fi
+      done
+
+      REGISTRY_HOST="$(printf '%s' "$REGISTRY_ENDPOINT" | sed -e 's#^https\?://##' -e 's#/$##')"
+      if [ -z "${TARGET_IMAGE_TAG:-}" ]; then
+        TARGET_IMAGE_TAG="$ELASTIC_STACK_VERSION"
+      fi
+      DESTINATION_IMAGE="${REGISTRY_HOST}/${TARGET_IMAGE_REPOSITORY}:${TARGET_IMAGE_TAG}"
+
+      mkdir -p /kaniko/.docker
+      AUTH_B64="$(printf '%s:%s' "$REGISTRY_USERNAME" "$REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "${REGISTRY_HOST}": {
+            "auth": "${AUTH_B64}"
+          }
+        }
+      }
+      EOF
+
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --destination "${DESTINATION_IMAGE}" \
+        --build-arg STACK_VERSION="${ELASTIC_STACK_VERSION}" \
+        --build-arg ARTIFACT_DOWNLOADS_BASE_URL="${ARTIFACT_DOWNLOADS_BASE_URL}"
