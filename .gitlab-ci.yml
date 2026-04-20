@@ -52,6 +52,7 @@ build_elastic_artifact_registry:
       KANIKO_EXTRA_ARGS=""
       BUILD_LOG="${CI_PROJECT_DIR}/build.log"
       ERROR_LOG="${CI_PROJECT_DIR}/error.log"
+      FILTERED_ERROR_LOG="${CI_PROJECT_DIR}/error.filtered.log"
       KANIKO_PIPE="${CI_PROJECT_DIR}/kaniko.pipe"
 
       case "${KANIKO_INSECURE_SKIP_TLS_VERIFY:-false}" in
@@ -72,9 +73,9 @@ build_elastic_artifact_registry:
       }
       EOF
 
-      rm -f "${BUILD_LOG}" "${ERROR_LOG}" "${KANIKO_PIPE}"
+      rm -f "${BUILD_LOG}" "${ERROR_LOG}" "${FILTERED_ERROR_LOG}" "${KANIKO_PIPE}"
       mkfifo "${KANIKO_PIPE}"
-      tee "${BUILD_LOG}" < "${KANIKO_PIPE}" &
+      tee "${BUILD_LOG}" "${ERROR_LOG}" < "${KANIKO_PIPE}" &
       TEE_PID=$!
 
       set +e
@@ -92,8 +93,10 @@ build_elastic_artifact_registry:
       wait "${TEE_PID}"
       rm -f "${KANIKO_PIPE}"
 
-      grep -E '^\[(ERROR|WARN)\]|error building image|curl: \([0-9]+\)' "${BUILD_LOG}" > "${ERROR_LOG}" || true
-      if [ ! -s "${ERROR_LOG}" ]; then
+      grep -E '^\[(ERROR|WARN)\]|error building image|curl: \([0-9]+\)|OOMKilled|exit code: 137' "${BUILD_LOG}" > "${FILTERED_ERROR_LOG}" || true
+      if [ -s "${FILTERED_ERROR_LOG}" ]; then
+        mv "${FILTERED_ERROR_LOG}" "${ERROR_LOG}"
+      elif [ ! -s "${ERROR_LOG}" ]; then
         printf 'No warnings or errors captured.\n' > "${ERROR_LOG}"
       fi
 

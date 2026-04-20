@@ -105,6 +105,7 @@ download_packages() {
   local pkg_dir=""
   local dl_url=""
   local output_path=""
+  local pkg_url_suffix=""
 
   for download_prefix in "${package_prefixes[@]}"; do
     for pkg_url_suffix in "$url_suffix" "${url_suffix}.sha512" "${url_suffix}.asc"; do

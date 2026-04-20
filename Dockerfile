@@ -17,9 +17,9 @@ FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=downloader /opt/elastic-packages /opt/elastic-packages
 
-RUN chown -R nginx:nginx /opt/elastic-packages /var/cache/nginx /var/log/nginx /etc/nginx \
+RUN mkdir -p /var/cache/nginx /var/log/nginx \
     && touch /tmp/nginx.pid \
-    && chown nginx:nginx /tmp/nginx.pid
+    && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /tmp/nginx.pid
 
 USER nginx
 
