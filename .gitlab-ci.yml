@@ -12,12 +12,21 @@ variables:
   ARTIFACT_DOWNLOADS_BASE_URL: "https://artifacts.elastic.co/downloads"
   TARGET_IMAGE_REPOSITORY: "elastic-artifact-registry"
   TARGET_IMAGE_TAG: ""
+  KANIKO_INSECURE_SKIP_TLS_VERIFY: "false"
 
 build_elastic_artifact_registry:
   stage: build
+  tags:
+    - linux
   image:
     name: $KANIKO_IMAGE
     entrypoint: [""]
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - build.log
+      - error.log
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"'
       when: manual
@@ -40,6 +49,16 @@ build_elastic_artifact_registry:
         TARGET_IMAGE_TAG="$ELASTIC_STACK_VERSION"
       fi
       DESTINATION_IMAGE="${REGISTRY_HOST}/${TARGET_IMAGE_REPOSITORY}:${TARGET_IMAGE_TAG}"
+      KANIKO_EXTRA_ARGS=""
+      BUILD_LOG="${CI_PROJECT_DIR}/build.log"
+      ERROR_LOG="${CI_PROJECT_DIR}/error.log"
+      KANIKO_PIPE="${CI_PROJECT_DIR}/kaniko.pipe"
+
+      case "${KANIKO_INSECURE_SKIP_TLS_VERIFY:-false}" in
+        true|TRUE|1|yes|YES)
+          KANIKO_EXTRA_ARGS="--insecure --skip-tls-verify --skip-tls-verify-pull"
+          ;;
+      esac
 
       mkdir -p /kaniko/.docker
       AUTH_B64="$(printf '%s:%s' "$REGISTRY_USERNAME" "$REGISTRY_PASSWORD" | base64 | tr -d '\n')"
@@ -53,9 +72,29 @@ build_elastic_artifact_registry:
       }
       EOF
 
+      rm -f "${BUILD_LOG}" "${ERROR_LOG}" "${KANIKO_PIPE}"
+      mkfifo "${KANIKO_PIPE}"
+      tee "${BUILD_LOG}" < "${KANIKO_PIPE}" &
+      TEE_PID=$!
+
+      set +e
       /kaniko/executor \
         --context "${CI_PROJECT_DIR}" \
         --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
         --destination "${DESTINATION_IMAGE}" \
+        ${KANIKO_EXTRA_ARGS} \
         --build-arg STACK_VERSION="${ELASTIC_STACK_VERSION}" \
-        --build-arg ARTIFACT_DOWNLOADS_BASE_URL="${ARTIFACT_DOWNLOADS_BASE_URL}"
+        --build-arg ARTIFACT_DOWNLOADS_BASE_URL="${ARTIFACT_DOWNLOADS_BASE_URL}" \
+        > "${KANIKO_PIPE}" 2>&1
+      KANIKO_EXIT_CODE=$?
+      set -e
+
+      wait "${TEE_PID}"
+      rm -f "${KANIKO_PIPE}"
+
+      grep -E '^\[(ERROR|WARN)\]|error building image|curl: \([0-9]+\)' "${BUILD_LOG}" > "${ERROR_LOG}" || true
+      if [ ! -s "${ERROR_LOG}" ]; then
+        printf 'No warnings or errors captured.\n' > "${ERROR_LOG}"
+      fi
+
+      exit "${KANIKO_EXIT_CODE}"

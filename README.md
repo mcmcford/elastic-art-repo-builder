@@ -21,6 +21,7 @@ The image:
 
 - `TARGET_IMAGE_TAG`: Image tag to use. Defaults to `ELASTIC_STACK_VERSION`
 - `ARTIFACT_DOWNLOADS_BASE_URL`: Defaults to `https://artifacts.elastic.co/downloads`
+- `KANIKO_INSECURE_SKIP_TLS_VERIFY`: Defaults to `false`. Set to `true` only if your Docker/OCI registry uses insecure or self-signed TLS and you need Kaniko to skip registry TLS verification.
 
 ## Running the pipeline
 
