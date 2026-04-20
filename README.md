@@ -7,6 +7,7 @@ The image:
 - Downloads the Elastic artifacts for a selected stack version during the container build
 - Serves them with NGINX on port `9080`
 - Is pushed to your chosen OCI registry from a manually triggered GitLab pipeline
+- Runs the NGINX process as the non-root `nginx` user
 
 ## Required GitLab CI/CD variables
 
@@ -34,3 +35,10 @@ The pipeline pushes an image like:
 `<REGISTRY_ENDPOINT>/<TARGET_IMAGE_REPOSITORY>:<TARGET_IMAGE_TAG>`
 
 At runtime, the container serves the downloaded files from `/opt/elastic-packages` on port `9080`.
+
+## Runtime hardening notes
+
+- The image runs as the non-root `nginx` user.
+- NGINX logs are written to stdout and stderr.
+- The PID file and temporary paths are placed under `/tmp`.
+- For stricter deployment hardening, prefer a read-only root filesystem with a writable `/tmp` mount.
