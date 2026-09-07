@@ -1,0 +1,62 @@
+name: Build Elastic Artifact Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      elastic_stack_version:
+        description: Elastic Stack version
+        required: true
+        default: '9.3.3'
+      target_image_repository:
+        description: Package name in GitHub Container Registry
+        required: true
+        default: elastic-artifact-registry
+      target_image_tag:
+        description: Image tag (defaults to the stack version)
+        required: false
+        default: ''
+      artifact_downloads_base_url:
+        description: Elastic artifacts base URL
+        required: true
+        default: https://artifacts.elastic.co/downloads
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_ENDPOINT: ghcr.io
+      ELASTIC_STACK_VERSION: ${{ inputs.elastic_stack_version }}
+      TARGET_IMAGE_REPOSITORY: ${{ inputs.target_image_repository }}
+      TARGET_IMAGE_TAG: ${{ inputs.target_image_tag }}
+      ARTIFACT_DOWNLOADS_BASE_URL: ${{ inputs.artifact_downloads_base_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to OCI registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_ENDPOINT }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${TARGET_IMAGE_TAG:-${ELASTIC_STACK_VERSION}}"
+          echo "IMAGE_DESTINATION=${REGISTRY_ENDPOINT}/${GITHUB_REPOSITORY_OWNER}/${TARGET_IMAGE_REPOSITORY}:${tag}" >> "$GITHUB_ENV"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_DESTINATION }}
+          build-args: |
+            STACK_VERSION=${{ env.ELASTIC_STACK_VERSION }}
+            ARTIFACT_DOWNLOADS_BASE_URL=${{ env.ARTIFACT_DOWNLOADS_BASE_URL }}

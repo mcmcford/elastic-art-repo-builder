@@ -6,34 +6,33 @@ The image:
 
 - Downloads the Elastic artifacts for a selected stack version during the container build
 - Serves them with NGINX on port `9080`
-- Is pushed to your chosen OCI registry from a manually triggered GitLab pipeline
+- Is pushed to your chosen OCI registry from a manually triggered GitHub Actions workflow
 - Runs the NGINX process as the non-root `nginx` user
 
-## Required GitLab CI/CD variables
+## GitHub Container Registry
 
-- `REGISTRY_ENDPOINT`: Registry hostname, for example `registry.example.com`
-- `REGISTRY_USERNAME`: Registry username
-- `REGISTRY_PASSWORD`: Registry password
-- `ELASTIC_STACK_VERSION`: Elastic version to download, for example `9.3.3`
-- `TARGET_IMAGE_REPOSITORY`: Repository path in the registry, for example `platform/elastic-artifact-registry`
+The workflow publishes to GitHub Container Registry (`ghcr.io`) using the built-in `GITHUB_TOKEN`; no registry secrets are required. The package is published as:
 
-## Optional GitLab CI/CD variables
+`ghcr.io/<GITHUB_OWNER>/elastic-artifact-registry:<TAG>`
 
-- `TARGET_IMAGE_TAG`: Image tag to use. Defaults to `ELASTIC_STACK_VERSION`
-- `ARTIFACT_DOWNLOADS_BASE_URL`: Defaults to `https://artifacts.elastic.co/downloads`
-- `KANIKO_INSECURE_SKIP_TLS_VERIFY`: Defaults to `false`. Set to `true` only if your Docker/OCI registry uses insecure or self-signed TLS and you need Kaniko to skip registry TLS verification.
+## Workflow inputs
+
+- `elastic_stack_version`: Elastic version to download. Defaults to `9.3.3`.
+- `target_image_repository`: Repository path in the registry. Defaults to `elastic-artifact-registry`.
+- `target_image_tag`: Image tag. Defaults to `elastic_stack_version`.
+- `artifact_downloads_base_url`: Defaults to `https://artifacts.elastic.co/downloads`.
 
 ## Running the pipeline
 
-1. In GitLab, run a new pipeline manually from the UI or API.
-2. Set or override the CI/CD variables for the target version and registry.
-3. Start the `build_elastic_artifact_registry` manual job.
+1. Ensure the repository Actions setting permits workflows to read and write packages.
+2. Open **Actions → Build Elastic Artifact Registry → Run workflow**.
+3. Set or override the workflow inputs and start the workflow.
 
 ## Result
 
 The pipeline pushes an image like:
 
-`<REGISTRY_ENDPOINT>/<TARGET_IMAGE_REPOSITORY>:<TARGET_IMAGE_TAG>`
+`ghcr.io/<GITHUB_OWNER>/<TARGET_IMAGE_REPOSITORY>:<TARGET_IMAGE_TAG>`
 
 At runtime, the container serves the downloaded files from `/opt/elastic-packages` on port `9080`.
 
